@@ -14,6 +14,9 @@
 #endif
 #ifdef HAVE_PTHREAD
 #include <pthread.h>
+#ifdef OPENBSD
+#include <pthread_np.h>
+#endif
 #endif
 
 
@@ -33,7 +36,7 @@ static void mutex_destructor(void *data)
 }
 
 
-int mutex_alloc(mtx_t **mtx)
+static int _mutex_alloc(mtx_t **mtx, int type)
 {
 	mtx_t *m;
 	int err;
@@ -45,7 +48,7 @@ int mutex_alloc(mtx_t **mtx)
 	if (!m)
 		return ENOMEM;
 
-	err = mtx_init(m, mtx_plain) != thrd_success;
+	err = mtx_init(m, type) != thrd_success;
 	if (err) {
 		err = ENOMEM;
 		goto out;
@@ -63,6 +66,18 @@ out:
 }
 
 
+int mutex_alloc(mtx_t **mtx)
+{
+	return _mutex_alloc(mtx, mtx_plain);
+}
+
+
+int mutex_alloc_tp(mtx_t **mtx, int type)
+{
+	return _mutex_alloc(mtx, type);
+}
+
+
 static int handler(void *p)
 {
 	struct thread th = *(struct thread *)p;
@@ -71,16 +86,14 @@ static int handler(void *p)
 
 #ifdef HAVE_PRCTL
 	(void)prctl(PR_SET_NAME, th.name);
-#elif defined(WIN32)
-	wchar_t *name = str_wchar(th.name);
-	if (name) {
-		(void)SetThreadDescription(GetCurrentThread(), name);
-		mem_deref(name);
-	}
 #elif defined(DARWIN)
 	(void)pthread_setname_np(th.name);
 #elif defined(HAVE_PTHREAD)
+#if defined(OPENBSD)
+	(void)pthread_set_name_np(*th.thr, th.name);
+#else
 	(void)pthread_setname_np(*th.thr, th.name);
+#endif
 #endif
 
 	return th.func(th.arg);

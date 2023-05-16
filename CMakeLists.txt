@@ -13,7 +13,7 @@
 cmake_minimum_required(VERSION 3.13)
 
 project(re
-  VERSION 3.0.0
+  VERSION 3.1.0
   LANGUAGES C
   HOMEPAGE_URL https://github.com/baresip/re
   DESCRIPTION "Generic library for real-time communications"
@@ -51,6 +51,8 @@ option(USE_JBUF "Enable JBUF" ON)
 option(USE_PCP "Enable PCP" ON)
 option(USE_RTMP "Enable RTMP" ON)
 option(USE_SIP "Enable SIP" ON)
+option(LIBRE_BUILD_SHARED "Build shared library" ON)
+option(LIBRE_BUILD_STATIC "Build static library" ON)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -586,6 +588,10 @@ elseif(${CMAKE_SYSTEM_NAME} MATCHES "FreeBSD")
   list(APPEND SRCS
     src/net/bsd/brt.c
   )
+elseif(${CMAKE_SYSTEM_NAME} MATCHES "OpenBSD")
+  list(APPEND SRCS
+    src/net/bsd/brt.c
+  )
 elseif(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
   list(APPEND SRCS
     src/net/linux/rt.c
@@ -632,6 +638,7 @@ if(WIN32)
     iphlpapi
     wsock32
     ws2_32
+    dbghelp
   )
 else()
   list(APPEND LINKLIBS -lm)
@@ -656,8 +663,12 @@ set_target_properties(re-objs PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(re-objs PRIVATE ${RE_DEFINITIONS})
 
 target_include_directories(re-objs PRIVATE .)
-target_include_directories(re-objs PRIVATE include
+target_include_directories(re-objs PRIVATE
   ${OPENSSL_INCLUDE_DIR} ${ZLIB_INCLUDE_DIRS})
+target_include_directories(re-objs PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+  )
 
 
 ##############################################################################
@@ -665,12 +676,16 @@ target_include_directories(re-objs PRIVATE include
 # Shared target libre.[so|dll|dylib]
 #
 
-add_library(re-shared SHARED $<TARGET_OBJECTS:re-objs>)
-target_link_libraries(re-shared PRIVATE ${LINKLIBS})
-set_target_properties(re-shared PROPERTIES VERSION
-  ${PROJECT_SOVERSION}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
-set_target_properties(re-shared PROPERTIES SOVERSION ${PROJECT_SOVERSION})
-set_target_properties(re-shared PROPERTIES OUTPUT_NAME "re")
+if(LIBRE_BUILD_SHARED)
+  list(APPEND RE_INSTALL_TARGETS re-shared)
+  add_library(re-shared SHARED $<TARGET_OBJECTS:re-objs>)
+  target_link_libraries(re-shared PRIVATE ${LINKLIBS})
+  set_target_properties(re-shared PROPERTIES VERSION
+    ${PROJECT_SOVERSION}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH})
+  set_target_properties(re-shared PROPERTIES SOVERSION ${PROJECT_SOVERSION})
+  set_target_properties(re-shared PROPERTIES OUTPUT_NAME "re")
+  add_library(libre::re-shared ALIAS re-shared)
+endif()
 
 
 ##############################################################################
@@ -678,15 +693,16 @@ set_target_properties(re-shared PROPERTIES OUTPUT_NAME "re")
 # Static target libre.a
 #
 
-add_library(re STATIC $<TARGET_OBJECTS:re-objs>)
-target_link_libraries(re PUBLIC ${LINKLIBS})
-target_include_directories(re PUBLIC include)
-set_target_properties(re PROPERTIES PUBLIC_HEADER "${HEADERS}")
+if(LIBRE_BUILD_STATIC)
+  list(APPEND RE_INSTALL_TARGETS re)
+  add_library(re STATIC $<TARGET_OBJECTS:re-objs>)
+  target_link_libraries(re PUBLIC ${LINKLIBS})
+  add_library(libre::re ALIAS re)
 
-if(MSVC)
-set_target_properties(re PROPERTIES OUTPUT_NAME "re-static")
+  if(MSVC)
+    set_target_properties(re PROPERTIES OUTPUT_NAME "re-static")
+  endif()
 endif()
-
 
 ##############################################################################
 #
@@ -705,7 +721,9 @@ configure_file(packaging/libre.pc.in libre.pc @ONLY)
 # Install section
 #
 
-install(TARGETS re-shared re
+
+install(TARGETS ${RE_INSTALL_TARGETS}
+  EXPORT libre
   LIBRARY
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT Libraries
@@ -713,20 +731,36 @@ install(TARGETS re-shared re
   ARCHIVE
     DESTINATION ${CMAKE_INSTALL_LIBDIR}
     COMPONENT Development
-  PUBLIC_HEADER
+  INCLUDES
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/re
-    COMPONENT Development
 )
 
-install(TARGETS re-shared
-  LIBRARY
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}
-    NAMELINK_ONLY
-    COMPONENT Development
+install(FILES ${HEADERS}
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/re
+  COMPONENT Development
 )
+
+install(EXPORT libre
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libre
+  NAMESPACE libre::
+)
+
+if(LIBRE_BUILD_SHARED)
+  install(TARGETS re-shared
+    LIBRARY
+      DESTINATION ${CMAKE_INSTALL_LIBDIR}
+      NAMELINK_ONLY
+      COMPONENT Development
+  )
+endif()
 
 install(FILES cmake/re-config.cmake
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/re
+  COMPONENT Development
+)
+
+install(FILES cmake/libre-config.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/libre
   COMPONENT Development
 )
 
