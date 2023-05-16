@@ -890,7 +890,7 @@ static void websock_estab_handler(void *arg)
 
 		re_printf("--> send\n");
 
-		err = websock_send(conn->websock_conn, WEBSOCK_BIN,
+		err = websock_send(conn->websock_conn, WEBSOCK_TEXT,
 				   "%b",
 				   mbuf_buf(qent->mb),
 				   mbuf_get_left(qent->mb));
@@ -987,7 +987,7 @@ static int ws_conn_send(struct sip_connqent **qentp, struct sip *sip,
 			   conn,
 			   dst, mb);
 
-		return websock_send(conn->websock_conn, WEBSOCK_BIN,
+		return websock_send(conn->websock_conn, WEBSOCK_TEXT,
 				    "%b",
 				    mbuf_buf(mb), mbuf_get_left(mb));
 	}
@@ -1472,7 +1472,7 @@ int sip_transp_send(struct sip_connqent **qentp, struct sip *sip, void *sock,
 
 			trace_send(sip, tp, conn, &dsttmp, mb);
 
-			err = websock_send(conn->websock_conn, WEBSOCK_BIN,
+			err = websock_send(conn->websock_conn, WEBSOCK_TEXT,
 					   "%b",
 					   mbuf_buf(mb), mbuf_get_left(mb));
 			if (err) {
